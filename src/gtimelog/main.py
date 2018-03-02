@@ -1065,10 +1065,10 @@ class Window(Gtk.ApplicationWindow):
 
     def get_virtual_midnight(self):
         h, m = self.gsettings.get_value('virtual-midnight')
-        return datetime.time(h, m)
+        return datetime.time(h, m, tzinfo=TZOffset())
 
     def get_today(self):
-        return virtual_day(datetime.datetime.now(), self.get_virtual_midnight())
+        return virtual_day(datetime.datetime.now(TZOffset()), self.get_virtual_midnight())
 
     def get_current_task(self):
         """Return the current task entry text (as Unicode)."""

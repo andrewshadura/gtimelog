@@ -12,6 +12,7 @@ import os
 import socket
 import sys
 import re
+import time
 from collections import defaultdict
 from hashlib import md5
 from operator import itemgetter
@@ -52,20 +53,54 @@ def format_duration_long(duration):
     else:
         return '%d min' % m
 
+class TZOffset (datetime.tzinfo):
+    ZERO = datetime.timedelta(0)
+
+    def __init__(self, offset = None):
+        # offset is an integer in 'hhmm' form. That is, UTC +5.5 = 530
+        if offset is not None:
+            offset = int(offset)
+        else:
+            # time.timezone is in seconds back to UTC
+            if time.daylight and time.localtime().tm_isdst:
+                offset = -time.altzone / 36
+            else:
+                offset = -time.timezone / 36
+            # (offset % 100) needs to be adjusted to be in minutes
+            # now (e.g. UTC +5.5 => offset = 550, when it should
+            # be 530) - yes, treating hhmm as an integer is a pain
+            m = ((offset % 100) * 60) / 100
+            offset -= (offset % 100) - m
+
+        self._offset = offset
+        h = offset / 100
+        m = offset % 100
+        self._offsetdelta = datetime.timedelta(hours=h, minutes=m)
+
+    def utcoffset(self, dt):
+        return self._offsetdelta
+
+    def dst(self, dt):
+        return self.ZERO
+
+    def tzname(self, dt):
+        return str(self._offset)
+
+    def __repr__(self):
+        return self.tzname(False)
 
 def parse_datetime(dt):
     """Parse a datetime instance from 'YYYY-MM-DD HH:MM' formatted string."""
-    if len(dt) != 16 or dt[4] != '-' or dt[7] != '-' or dt[10] != ' ' or dt[13] != ':':
+    m = re.match(r'^(?P<year>\d+)-(?P<month>\d+)-(?P<day>\d+) (?P<hour>\d+):(?P<min>\d+)(?: (?P<tz>[+-]\d+))?$', dt)
+    if not m:
         raise ValueError('bad date time: %r' % dt)
-    try:
-        year = int(dt[:4])
-        month = int(dt[5:7])
-        day = int(dt[8:10])
-        hour = int(dt[11:13])
-        min = int(dt[14:])
-    except ValueError:
-        raise ValueError('bad date time: %r' % dt)
-    return datetime.datetime(year, month, day, hour, min)
+
+    d = dict((k, int(v) if v is not None else None)
+             for (k, v) in m.groupdict().items())
+
+    return datetime.datetime(d['year'], d['month'], d['day'],
+                             d['hour'], d['min'],
+                             tzinfo=TZOffset(d['tz']))
 
 
 def parse_time(t):
@@ -74,7 +109,7 @@ def parse_time(t):
     if not m:
         raise ValueError('bad time: %r' % t)
     hour, min = map(int, m.groups())
-    return datetime.time(hour, min)
+    return datetime.time(hour, min, tzinfo=TZOffset())
 
 
 def virtual_day(dt, virtual_midnight):
@@ -83,7 +118,7 @@ def virtual_day(dt, virtual_midnight):
     Timestamps between midnight and "virtual midnight" (e.g. 2 am) are
     assigned to the previous "virtual day".
     """
-    if dt.time() < virtual_midnight:     # assign to previous day
+    if dt.timetz() < virtual_midnight:     # assign to previous day
         return dt.date() - datetime.timedelta(1)
     return dt.date()
 
@@ -897,7 +932,7 @@ class TimeLog(TimeCollection):
 
     def virtual_today(self):
         """Return today's date, adjusted for virtual midnight."""
-        return virtual_day(datetime.datetime.now(), self.virtual_midnight)
+        return virtual_day(datetime.datetime.now(TZOffset()), self.virtual_midnight)
 
     def check_reload(self):
         """Look at the mtime of timelog.txt, and reload it if necessary.
@@ -1005,7 +1040,7 @@ class TimeLog(TimeCollection):
     def append(self, entry, now=None):
         """Append a new entry to the time log."""
         if not now:
-            now = datetime.datetime.now().replace(second=0, microsecond=0)
+            now = datetime.datetime.now(TZOffset()).replace(second=0, microsecond=0)
         self.check_reload()
         need_space = False
         last = self.last_time()
@@ -1013,7 +1048,7 @@ class TimeLog(TimeCollection):
             need_space = True
         self.items.append((now, entry))
         self.window.items.append((now, entry))
-        line = '%s: %s' % (now.strftime("%Y-%m-%d %H:%M"), entry)
+        line = '%s: %s' % (now.strftime("%Y-%m-%d %H:%M %z"), entry)
         self.raw_append(line, need_space)
 
     def valid_time(self, time):
@@ -1021,7 +1056,7 @@ class TimeLog(TimeCollection):
 
         Valid times are those between the last timelog entry and now.
         """
-        if time > datetime.datetime.now():
+        if time > datetime.datetime.now(TZOffset()):
             return False
         last = self.last_time()
         if last and time < last:
@@ -1046,8 +1081,8 @@ class TimeLog(TimeCollection):
             m = int(date_match.group(2))
             if 0 <= h < 24 and 0 <= m < 60:
                 now = datetime.datetime.combine(self.virtual_today(),
-                                                datetime.time(h, m))
-                if now.time() < self.virtual_midnight:
+                                                datetime.time(h, m, tzinfo=TZOffset()))
+                if now.timetz() < self.virtual_midnight:
                     now += datetime.timedelta(1)
                 if self.valid_time(now):
                     entry = entry[date_match.end():]
@@ -1055,7 +1090,7 @@ class TimeLog(TimeCollection):
                     now = None
         if delta_match:
             seconds = int(delta_match.group()) * 60
-            now = datetime.datetime.now().replace(second=0, microsecond=0)
+            now = datetime.datetime.now(TZOffset()).replace(second=0, microsecond=0)
             now += datetime.timedelta(seconds=seconds)
             if self.valid_time(now):
                 entry = entry[delta_match.end():]

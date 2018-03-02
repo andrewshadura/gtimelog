@@ -14,7 +14,7 @@ except ImportError:
     PY3 = False
 
 
-from gtimelog.timelog import parse_time
+from gtimelog.timelog import parse_time, TZOffset
 
 
 legacy_default_home = os.path.normpath('~/.gtimelog')
@@ -44,7 +44,7 @@ class Settings(object):
 
     hours = 8
     office_hours = 9
-    virtual_midnight = datetime.time(2, 0)
+    virtual_midnight = datetime.time(2, 0, tzinfo=TZOffset())
 
     task_list_url = ''
     edit_task_list_cmd = ''

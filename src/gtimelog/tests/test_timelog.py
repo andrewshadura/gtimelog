@@ -24,7 +24,7 @@ except ImportError:
     # Python 2
     import mock
 
-from gtimelog.timelog import TimeLog, Reports, ReportRecord, Exports, TaskList
+from gtimelog.timelog import TimeLog, Reports, ReportRecord, Exports, TaskList, TZOffset
 
 
 class Checker(doctest.OutputChecker):
@@ -113,7 +113,11 @@ def doctest_parse_datetime():
 
         >>> from gtimelog.timelog import parse_datetime
         >>> parse_datetime('2005-02-03 02:13')
-        datetime.datetime(2005, 2, 3, 2, 13)
+        datetime.datetime(2005, 2, 3, 2, 13, tzinfo=0)
+        >>> parse_datetime('2005-02-03 02:13 +0800')
+        datetime.datetime(2005, 2, 3, 2, 13, tzinfo=800)
+        >>> parse_datetime('2005-02-03 02:13 -0500')
+        datetime.datetime(2005, 2, 3, 2, 13, tzinfo=-500)
         >>> parse_datetime('xyzzy')
         Traceback (most recent call last):
           ...
@@ -131,7 +135,7 @@ def doctest_parse_time():
 
         >>> from gtimelog.timelog import parse_time
         >>> parse_time('02:13')
-        datetime.time(2, 13)
+        datetime.time(2, 13, tzinfo=0)
         >>> parse_time('xyzzy')
         Traceback (most recent call last):
           ...
@@ -491,9 +495,10 @@ def doctest_TimeWindow_last_entry():
 def doctest_Exports_to_csv_complete():
     r"""Tests for Exports.to_csv_complete
 
+        >>> from gtimelog import TZOffset
         >>> from datetime import datetime, time
-        >>> min = datetime(2008, 6, 1)
-        >>> max = datetime(2008, 7, 1)
+        >>> min = datetime(2008, 6, 1, tzinfo=TZOffset())
+        >>> max = datetime(2008, 7, 1, tzinfo=TZOffset())
         >>> vm = time(2, 0)
 
         >>> sampledata = StringIO('''
@@ -1061,7 +1066,7 @@ class TestTimeLog(Mixins, unittest.TestCase):
 
     def test_reloading(self):
         logfile = self.tempfile()
-        timelog = TimeLog(logfile, datetime.time(2, 0))
+        timelog = TimeLog(logfile, datetime.time(2, 0, tzinfo=TZOffset()))
         # No file - nothing to reload
         self.assertFalse(timelog.check_reload())
         # Create a file - it should be reloaded, once.
@@ -1079,146 +1084,146 @@ class TestTimeLog(Mixins, unittest.TestCase):
         self.assertFalse(timelog.check_reload())
 
     def test_window_for_day(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         window = timelog.window_for_day(datetime.date(2015, 9, 17))
-        self.assertEqual(window.min_timestamp, datetime.datetime(2015, 9, 17, 2, 0))
-        self.assertEqual(window.max_timestamp, datetime.datetime(2015, 9, 18, 2, 0))
+        self.assertEqual(window.min_timestamp, datetime.datetime(2015, 9, 17, 2, 0, tzinfo=TZOffset()))
+        self.assertEqual(window.max_timestamp, datetime.datetime(2015, 9, 18, 2, 0, tzinfo=TZOffset()))
 
     def test_window_for_week(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         for d in range(14, 21):
             window = timelog.window_for_week(datetime.date(2015, 9, d))
-            self.assertEqual(window.min_timestamp, datetime.datetime(2015, 9, 14, 2, 0))
-            self.assertEqual(window.max_timestamp, datetime.datetime(2015, 9, 21, 2, 0))
+            self.assertEqual(window.min_timestamp, datetime.datetime(2015, 9, 14, 2, 0, tzinfo=TZOffset()))
+            self.assertEqual(window.max_timestamp, datetime.datetime(2015, 9, 21, 2, 0, tzinfo=TZOffset()))
 
     def test_window_for_month(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         for d in range(1, 31):
             window = timelog.window_for_month(datetime.date(2015, 9, d))
-            self.assertEqual(window.min_timestamp, datetime.datetime(2015, 9, 1, 2, 0))
-            self.assertEqual(window.max_timestamp, datetime.datetime(2015, 10, 1, 2, 0))
+            self.assertEqual(window.min_timestamp, datetime.datetime(2015, 9, 1, 2, 0, tzinfo=TZOffset()))
+            self.assertEqual(window.max_timestamp, datetime.datetime(2015, 10, 1, 2, 0, tzinfo=TZOffset()))
 
     def test_window_for_date_range(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         window = timelog.window_for_date_range(datetime.date(2015, 9, 3),
                                                datetime.date(2015, 9, 24))
-        self.assertEqual(window.min_timestamp, datetime.datetime(2015, 9, 3, 2, 0))
-        self.assertEqual(window.max_timestamp, datetime.datetime(2015, 9, 25, 2, 0))
+        self.assertEqual(window.min_timestamp, datetime.datetime(2015, 9, 3, 2, 0, tzinfo=TZOffset()))
+        self.assertEqual(window.max_timestamp, datetime.datetime(2015, 9, 25, 2, 0, tzinfo=TZOffset()))
 
     def test_appending_clears_window_cache(self):
         # Regression test for https://github.com/gtimelog/gtimelog/issues/28
-        timelog = TimeLog(self.tempfile(), datetime.time(2, 0))
+        timelog = TimeLog(self.tempfile(), datetime.time(2, 0, tzinfo=TZOffset()))
 
         w = timelog.window_for_day(datetime.date(2014, 11, 12))
         self.assertEqual(list(w.all_entries()), [])
 
-        timelog.append('started **', now=datetime.datetime(2014, 11, 12, 10, 00))
+        timelog.append('started **', now=datetime.datetime(2014, 11, 12, 10, 00, tzinfo=TZOffset()))
         w = timelog.window_for_day(datetime.date(2014, 11, 12))
         self.assertEqual(len(list(w.all_entries())), 1)
 
     def test_append_adds_blank_line_on_new_day(self):
-        timelog = TimeLog(self.tempfile(), datetime.time(2, 0))
-        timelog.append('working on sth', now=datetime.datetime(2014, 11, 12, 18, 0))
-        timelog.append('new day **', now=datetime.datetime(2014, 11, 13, 8, 0))
+        timelog = TimeLog(self.tempfile(), datetime.time(2, 0, tzinfo=TZOffset(0)))
+        timelog.append('working on sth', now=datetime.datetime(2014, 11, 12, 18, 0, tzinfo=TZOffset(0)))
+        timelog.append('new day **', now=datetime.datetime(2014, 11, 13, 8, 0, tzinfo=TZOffset(0)))
         with open(timelog.filename, 'r') as f:
             self.assertEqual(f.readlines(),
-                             ['2014-11-12 18:00: working on sth\n',
+                             ['2014-11-12 18:00 +0000: working on sth\n',
                               '\n',
-                              '2014-11-13 08:00: new day **\n'])
+                              '2014-11-13 08:00 +0000: new day **\n'])
 
-    @freezegun.freeze_time("2015-05-12 16:27:35.115265")
+    @freezegun.freeze_time("2015-05-12 16:27:35.115265", tz_offset=0)
     def test_append_rounds_the_time(self):
-        timelog = TimeLog(self.tempfile(), datetime.time(2, 0))
+        timelog = TimeLog(self.tempfile(), datetime.time(2, 0, tzinfo=TZOffset(0)))
         timelog.append('now')
-        self.assertEqual(timelog.items[-1][0], datetime.datetime(2015, 5, 12, 16, 27))
+        self.assertEqual(timelog.items[-1][0], datetime.datetime(2015, 5, 12, 16, 27, tzinfo=TZOffset(0)))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=0)
     def test_valid_time_accepts_any_time_in_the_past_when_log_is_empty(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
-        past = datetime.datetime(2015, 5, 12, 14, 20)
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset(0)))
+        past = datetime.datetime(2015, 5, 12, 14, 20, tzinfo=TZOffset(0))
         self.assertTrue(timelog.valid_time(past))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=0)
     def test_valid_time_rejects_times_in_the_future(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
-        future = datetime.datetime(2015, 5, 12, 16, 30)
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset(0)))
+        future = datetime.datetime(2015, 5, 12, 16, 30, tzinfo=TZOffset(0))
         self.assertFalse(timelog.valid_time(future))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=0)
     def test_valid_time_rejects_times_before_last_entry(self):
         timelog = TimeLog(StringIO("2015-05-12 15:00: did stuff"),
-                          datetime.time(2, 0))
-        past = datetime.datetime(2015, 5, 12, 14, 20)
+                          datetime.time(2, 0, tzinfo=TZOffset(0)))
+        past = datetime.datetime(2015, 5, 12, 14, 20, tzinfo=TZOffset(0))
         self.assertFalse(timelog.valid_time(past))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=0)
     def test_valid_time_accepts_times_between_last_entry_and_now(self):
         timelog = TimeLog(StringIO("2015-05-12 15:00: did stuff"),
-                          datetime.time(2, 0))
-        past = datetime.datetime(2015, 5, 12, 15, 20)
+                          datetime.time(2, 0, tzinfo=TZOffset(0)))
+        past = datetime.datetime(2015, 5, 12, 15, 20, tzinfo=TZOffset(0))
         self.assertTrue(timelog.valid_time(past))
 
     def test_parse_correction_leaves_regular_text_alone(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset(0)))
         self.assertEqual(timelog.parse_correction("did stuff"),
                          ("did stuff", None))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=TZOffset()._offset)
     def test_parse_correction_recognizes_absolute_times(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         self.assertEqual(timelog.parse_correction("15:20 did stuff"),
-                         ("did stuff", datetime.datetime(2015, 5, 12, 15, 20)))
+                         ("did stuff", datetime.datetime(2015, 5, 12, 15, 20, tzinfo=TZOffset())))
 
-    @freezegun.freeze_time("2015-05-13 00:27")
+    @freezegun.freeze_time("2015-05-13 00:27", tz_offset=TZOffset()._offset)
     def test_parse_correction_handles_virtual_midnight_yesterdays_time(self):
         # Regression test for https://github.com/gtimelog/gtimelog/issues/33
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         self.assertEqual(timelog.parse_correction("15:20 did stuff"),
-                         ("did stuff", datetime.datetime(2015, 5, 12, 15, 20)))
+                         ("did stuff", datetime.datetime(2015, 5, 12, 15, 20, tzinfo=TZOffset())))
 
-    @freezegun.freeze_time("2015-05-13 00:27")
+    @freezegun.freeze_time("2015-05-13 00:27", tz_offset=TZOffset()._offset)
     def test_parse_correction_handles_virtual_midnight_todays_time(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         self.assertEqual(timelog.parse_correction("00:15 did stuff"),
-                         ("did stuff", datetime.datetime(2015, 5, 13, 00, 15)))
+                         ("did stuff", datetime.datetime(2015, 5, 13, 00, 15, tzinfo=TZOffset())))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=TZOffset()._offset)
     def test_parse_correction_ignores_future_absolute_times(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         self.assertEqual(timelog.parse_correction("17:20 did stuff"),
                          ("17:20 did stuff", None))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=TZOffset()._offset)
     def test_parse_correction_ignores_bad_absolute_times(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         self.assertEqual(timelog.parse_correction("19:60 did stuff"),
                          ("19:60 did stuff", None))
         self.assertEqual(timelog.parse_correction("24:00 did stuff"),
                          ("24:00 did stuff", None))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=TZOffset()._offset)
     def test_parse_correction_ignores_absolute_times_before_last_entry(self):
         timelog = TimeLog(StringIO("2015-05-12 16:00: stuff"),
-                          datetime.time(2, 0))
+                          datetime.time(2, 0, tzinfo=TZOffset()))
         self.assertEqual(timelog.parse_correction("15:20 did stuff"),
                          ("15:20 did stuff", None))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=TZOffset()._offset)
     def test_parse_correction_recognizes_relative_times(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         self.assertEqual(timelog.parse_correction("-20 did stuff"),
-                         ("did stuff", datetime.datetime(2015, 5, 12, 16, 7)))
+                         ("did stuff", datetime.datetime(2015, 5, 12, 16, 7, tzinfo=TZOffset())))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=TZOffset()._offset)
     def test_parse_correction_ignores_relative_times_before_last_entry(self):
         timelog = TimeLog(StringIO("2015-05-12 16:00: stuff"),
-                          datetime.time(2, 0))
+                          datetime.time(2, 0, tzinfo=TZOffset()))
         self.assertEqual(timelog.parse_correction("-30 did stuff"),
                          ("-30 did stuff", None))
 
-    @freezegun.freeze_time("2015-05-12 16:27")
+    @freezegun.freeze_time("2015-05-12 16:27", tz_offset=TZOffset()._offset)
     def test_parse_correction_ignores_bad_relative_times(self):
-        timelog = TimeLog(StringIO(), datetime.time(2, 0))
+        timelog = TimeLog(StringIO(), datetime.time(2, 0, tzinfo=TZOffset()))
         self.assertEqual(timelog.parse_correction("-200 did stuff"),
                          ("-200 did stuff", None))
 
@@ -1242,9 +1247,9 @@ class TestFiltering(unittest.TestCase):
     def setUp(self):
         self.tw = make_time_window(
             StringIO(self.TEST_TIMELOG),
-            datetime.datetime(2014, 5, 27, 9, 0),
-            datetime.datetime(2014, 5, 27, 23, 59),
-            datetime.time(2, 0),
+            datetime.datetime(2014, 5, 27, 9, 0, tzinfo=TZOffset()),
+            datetime.datetime(2014, 5, 27, 23, 59, tzinfo=TZOffset()),
+            datetime.time(2, 0, tzinfo=TZOffset()),
         )
 
     def test_TimeWindow_totals_filtering1(self):
@@ -1285,9 +1290,9 @@ class TestTagging(unittest.TestCase):
     def setUp(self):
         self.tw = make_time_window(
             StringIO(self.TEST_TIMELOG),
-            datetime.datetime(2014, 5, 27, 9, 0),
-            datetime.datetime(2014, 5, 27, 23, 59),
-            datetime.time(2, 0),
+            datetime.datetime(2014, 5, 27, 9, 0, tzinfo=TZOffset()),
+            datetime.datetime(2014, 5, 27, 23, 59, tzinfo=TZOffset()),
+            datetime.time(2, 0, tzinfo=TZOffset()),
         )
 
     def test_TimeWindow_set_of_all_tags(self):
